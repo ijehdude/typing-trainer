@@ -1,26 +1,105 @@
 @import "tailwindcss";
 
+/*
+ * Dark by default (PRD §18.1); light theme opts in via [data-theme="light"].
+ * High-contrast variant layers on top of either.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b0e14;
+  --surface: #11151d;
+  --surface-2: #171c26;
+  --border: #232a37;
+  --foreground: #e6e9ef;
+  --muted: #7d8590;
+  --accent: #4c9aff;
+  --ok: #9ece6a;
+  --err: #f7768e;
+  --err-bg: rgba(247, 118, 142, 0.18);
+  --warn: #e0af68;
+}
+
+[data-theme="light"] {
+  --background: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f5;
+  --border: #dde1e6;
+  --foreground: #1a1f27;
+  --muted: #5c6570;
+  --accent: #0b6bcb;
+  --ok: #3f7d20;
+  --err: #c62828;
+  --err-bg: rgba(198, 40, 40, 0.12);
+  --warn: #9a6700;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-err: var(--err);
+  --color-warn: var(--warn);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/*
+ * Typing surface (PRD §18.5). These classes are mutated directly on character
+ * spans by the TypingController on the rAF path — keep them out of Tailwind
+ * so the class strings stay stable and cheap.
+ */
+.tc-passage {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 18px; /* CONFIG.ui.fontSizePx */
+  line-height: 2.2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: none;
+}
+
+.tc-pending {
+  color: var(--muted);
+}
+
+.tc-ok {
+  color: var(--foreground);
+}
+
+.tc-err {
+  color: var(--err);
+  background: var(--err-bg);
+  border-radius: 2px;
+  /* Colour is never the only signal (§18.7). */
+  text-decoration: underline;
+  text-decoration-color: var(--err);
+  text-underline-offset: 4px;
+}
+
+.tc-caret {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 1.6em;
+  margin-top: 0.3em;
+  background: var(--accent);
+  will-change: transform;
+  /* No blink during active typing (§18.5). */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
