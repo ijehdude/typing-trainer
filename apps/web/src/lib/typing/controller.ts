@@ -8,6 +8,9 @@ import { MOD_ALT, MOD_CTRL, MOD_META, MOD_SHIFT } from "@typing-trainer/engine";
  * write into a preallocated ring buffer, update O(1) cursor state, and
  * schedule a rAF. All rendering happens in the rAF callback by mutating
  * character spans directly — never through a React re-render of the passage.
+ *
+ * Text can be appended while typing (the lookahead buffer, §13.2) — visible
+ * text never mutates; adaptation only changes what has not yet been created.
  */
 
 export type InputPolicy = "free" | "strict";
@@ -20,9 +23,13 @@ export interface ControllerOptions {
   onProgress?: (typedChars: number, totalChars: number) => void;
   onComplete?: () => void;
   onPauseChange?: (paused: boolean) => void;
+  /** Called on the rAF path every `batchSize` keystrokes (live loop, §13.1). */
+  onBatch?: (count: number) => void;
+  batchSize?: number;
 }
 
-const CAPACITY = 1 << 15; // 32768 keystrokes ≫ any single block
+const CAPACITY = 1 << 15;       // keystroke ring buffer
+const TEXT_CAPACITY = 1 << 14;  // max chars in a block
 
 const enum Flag {
   Correct = 1,
@@ -32,7 +39,7 @@ const enum Flag {
 
 export class TypingController {
   private readonly opts: ControllerOptions;
-  private readonly target: string;
+  private target: string;
 
   // Preallocated columnar ring buffer — no allocation on the hot path.
   private readonly bufT = new Float64Array(CAPACITY);
@@ -45,10 +52,9 @@ export class TypingController {
   private count = 0;
 
   /** Per-position display state: 0 untyped, 1 correct, 2 error. */
-  private readonly posState: Uint8Array;
-  /** Typed character per position (errors display the typed char, §18.5). */
-  private readonly posTyped: string[];
-  private readonly dirty: Int32Array;
+  private readonly posState = new Uint8Array(TEXT_CAPACITY);
+  private readonly posTyped: string[] = new Array<string>(TEXT_CAPACITY).fill("");
+  private readonly dirty = new Int32Array(TEXT_CAPACITY);
   private dirtyCount = 0;
 
   private cursor = 0;
@@ -56,11 +62,17 @@ export class TypingController {
   private paused = false;
   private composing = false;
   private done = false;
-  private escapeArmed = false; // Esc then Tab leaves the field (§21.5)
+  private escapeArmed = false;    // Esc then Tab leaves the field (§21.5)
+  private finishRequested = false; // time-based blocks end at a word boundary
+  private lastT = 0;
+
+  /** Active typing time, pauses excluded (incremental, §6.2 rule 4). */
+  activeMs = 0;
 
   private spans: HTMLElement[] = [];
   private caretEl: HTMLElement | null = null;
   private scrollEl: HTMLElement | null = null;
+  private spanHost: HTMLElement | null = null;
   private lastKeydownT = 0;
 
   /** keystroke→paint latencies (ms) for the CI harness (Appendix B). */
@@ -68,18 +80,54 @@ export class TypingController {
 
   constructor(opts: ControllerOptions) {
     this.opts = opts;
-    this.target = opts.targetText;
-    this.posState = new Uint8Array(this.target.length);
-    this.posTyped = new Array<string>(this.target.length).fill("");
-    this.dirty = new Int32Array(this.target.length + 8);
+    this.target = opts.targetText.slice(0, TEXT_CAPACITY);
   }
 
-  attach(spans: HTMLElement[], caretEl: HTMLElement, scrollEl: HTMLElement): void {
-    this.spans = spans;
+  /**
+   * Build the passage spans imperatively inside `spanHost` (a node React
+   * never looks inside) and attach the caret + scroll elements. Appended
+   * text creates further spans.
+   */
+  attach(spanHost: HTMLElement, caretEl: HTMLElement, scrollEl: HTMLElement): void {
+    this.spanHost = spanHost;
     this.caretEl = caretEl;
     this.scrollEl = scrollEl;
-    this.markDirty(0);
+    this.spans = [];
+    for (let i = 0; i < this.target.length; i++) {
+      this.createSpan(i);
+    }
     this.scheduleRender();
+  }
+
+  detach(): void {
+    this.spanHost?.replaceChildren();
+    this.spans = [];
+  }
+
+  private createSpan(i: number): void {
+    const span = document.createElement("span");
+    span.className = "tc-pending";
+    span.dataset["ch"] = String(i);
+    span.textContent = this.target[i]!;
+    this.spanHost!.appendChild(span);
+    this.spans.push(span);
+  }
+
+  /** Append text beyond what exists — never touches already-created spans. */
+  appendText(text: string): void {
+    const start = this.target.length;
+    const room = TEXT_CAPACITY - start;
+    if (room <= 0) return;
+    const added = text.slice(0, room);
+    this.target += added;
+    if (this.spanHost) {
+      for (let i = start; i < this.target.length; i++) this.createSpan(i);
+    }
+  }
+
+  /** Finish the block at the next word boundary (time-based blocks). */
+  requestFinish(): void {
+    this.finishRequested = true;
   }
 
   get isPaused(): boolean {
@@ -88,6 +136,27 @@ export class TypingController {
 
   get isDone(): boolean {
     return this.done;
+  }
+
+  get keystrokeCount(): number {
+    return this.count;
+  }
+
+  get cursorIndex(): number {
+    return this.cursor;
+  }
+
+  get targetLength(): number {
+    return this.target.length;
+  }
+
+  get targetText(): string {
+    return this.target;
+  }
+
+  /** Chars of un-typed text remaining beyond the caret. */
+  get remainingChars(): number {
+    return this.target.length - this.cursor;
   }
 
   /** HOT PATH — see PRD §19.3 for the prohibitions that apply here. */
@@ -112,10 +181,15 @@ export class TypingController {
 
     const t = e.timeStamp; // DOMHighResTimeStamp, read synchronously (§6.2 rule 1)
     this.lastKeydownT = t;
+    if (this.lastT > 0) {
+      const dt = t - this.lastT;
+      if (dt > 0 && dt <= 2000) this.activeMs += dt;
+    }
+    this.lastT = t;
 
     const i = this.count & (CAPACITY - 1);
     const isBackspace = key === "Backspace";
-    const index = isBackspace ? Math.max(0, this.cursor - 1) : this.cursor;
+    const index = isBackspace ? (this.cursor > 0 ? this.cursor - 1 : 0) : this.cursor;
     const expected = this.target.charCodeAt(index); // NaN-safe int compare
     const correct = !isBackspace && key.charCodeAt(0) === expected && key.length === 1;
 
@@ -141,7 +215,8 @@ export class TypingController {
       this.posTyped[this.cursor] = key;
       this.markDirty(this.cursor);
       this.cursor++;
-      if (this.cursor >= this.target.length) this.done = true;
+      const atBoundary = this.finishRequested && (key === " " || key === "\n");
+      if (this.cursor >= this.target.length || atBoundary) this.done = true;
     } else {
       // strict mode: caret does not advance on error (§6.4)
       this.posState[this.cursor] = 2;
@@ -153,7 +228,6 @@ export class TypingController {
   };
 
   handleKeyup = (e: KeyboardEvent): void => {
-    // Record dwell on the most recent matching keydown (bounded backward scan).
     const upT = e.timeStamp;
     const start = this.count - 1;
     const lowest = Math.max(0, this.count - 8);
@@ -175,6 +249,7 @@ export class TypingController {
   };
 
   handleBlur = (): void => {
+    this.lastT = 0; // the pause gap must not count toward active time
     this.setPaused(true);
   };
 
@@ -195,6 +270,8 @@ export class TypingController {
     this.rafScheduled = true;
     requestAnimationFrame(this.render);
   }
+
+  private lastBatchAt = 0;
 
   private render = (): void => {
     this.rafScheduled = false;
@@ -240,16 +317,22 @@ export class TypingController {
       this.lastKeydownT = 0;
     }
 
+    const batchSize = this.opts.batchSize ?? 8;
+    if (this.opts.onBatch && this.count - this.lastBatchAt >= batchSize) {
+      this.lastBatchAt = this.count;
+      this.opts.onBatch(this.count);
+    }
+
     this.opts.onProgress?.(this.cursor, this.target.length);
     if (this.done) this.opts.onComplete?.();
   };
 
-  /** Materialize the ring buffer into engine keystrokes (off the hot path). */
-  getKeystrokes(): Keystroke[] {
+  /** Materialize keystrokes [from, count) — off the hot path. */
+  getKeystrokesSince(from: number): Keystroke[] {
+    const first = Math.max(from, this.count - CAPACITY);
     const out: Keystroke[] = [];
-    const n = Math.min(this.count, CAPACITY);
-    for (let k = 0; k < n; k++) {
-      const i = (this.count - n + k) & (CAPACITY - 1);
+    for (let n = first; n < this.count; n++) {
+      const i = n & (CAPACITY - 1);
       const flags = this.bufFlags[i]!;
       const index = this.bufIndex[i]!;
       out.push({
@@ -266,5 +349,9 @@ export class TypingController {
       });
     }
     return out;
+  }
+
+  getKeystrokes(): Keystroke[] {
+    return this.getKeystrokesSince(0);
   }
 }

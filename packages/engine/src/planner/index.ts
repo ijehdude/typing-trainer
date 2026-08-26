@@ -109,8 +109,42 @@ export function planSession(input: PlanInput, cfg: EngineConfig = CONFIG): Sessi
     push('test', 1, 5, [], { label: 'Speed test' });
   }
 
+  applyModeOverrides(blocks, input.mode ?? 'autopilot');
   enforceInvariants(blocks);
   return { blocks, minutes: m, seed: input.seed };
+}
+
+/** Training modes (PRD §16.1) reshape the Autopilot template, not replace it. */
+function applyModeOverrides(blocks: PlannedBlock[], mode: TrainingMode): void {
+  for (const b of blocks) {
+    if (b.kind === 'warmup' || b.kind === 'test') continue;
+    switch (mode) {
+      case 'speed':
+        b.stage = Math.max(4, b.stage) as Stage; // shorter, easier, real text
+        break;
+      case 'precision':
+        b.policy = 'strict';
+        break;
+      case 'muscle_memory':
+        b.visibility = 'keyboard_hidden';
+        b.stage = Math.min(2, b.stage) as Stage;
+        break;
+      case 'real_world':
+        b.kind = 'transfer';
+        b.stage = 5;
+        b.label = 'Real-world typing';
+        break;
+      case 'fix_weaknesses':
+        if (b.kind === 'transfer') {
+          b.kind = 'target';
+          b.stage = 2;
+          b.label = 'Weakness drill';
+        }
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 /** Hard invariants (PRD §12.2). Throws in dev; the planner must never emit these. */

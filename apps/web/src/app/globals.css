@@ -85,6 +85,11 @@ body {
   text-underline-offset: 4px;
 }
 
+/* text_faded mode: upcoming text dimmed hard to force look-ahead (§16.2) */
+.tc-text-faded .tc-pending {
+  opacity: 0.35;
+}
+
 .tc-caret {
   position: absolute;
   top: 0;
@@ -95,6 +100,31 @@ body {
   background: var(--accent);
   will-change: transform;
   /* No blink during active typing (§18.5). */
+}
+
+.btn-primary {
+  border-radius: 0.375rem;
+  background: var(--accent);
+  color: var(--background);
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-ghost {
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+.btn-ghost:hover {
+  background: var(--surface-2);
 }
 
 @media (prefers-reduced-motion: reduce) {
