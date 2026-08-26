@@ -13,6 +13,7 @@ import {
   computeSkillProfile, isPunctChar, punctRatioFromIkis, weakKeyRatioFromKeyIkis,
 } from '../skill/index';
 import type { DiagnosisSnapshot, PatternStat, SessionMetrics } from '../types';
+import { detectHabits } from '../habits/index';
 import { buildFindings, type FindingCandidate } from './findings';
 
 /**
@@ -30,6 +31,8 @@ export interface SessionAnalysisInput {
   prior?: ModelPrior;
   /** Retained observations from earlier sessions (refit window, §7.2). */
   retainedObs?: readonly Observation[];
+  /** Per-hand IKI ratios from previous sessions (habit detection, §15.1). */
+  handRatioHistory?: readonly number[];
 }
 
 export interface SessionAnalysisResult {
@@ -107,8 +110,20 @@ export function analyzeSession(
 
   // --- findings, tradeoff, bottlenecks ------------------------------------
   const { findings, belowBar, notes } = buildFindings(params, input.corpusFreqs, layout, cfg);
-  const tradeoff = fitTradeoff(extractTradeoffPoints(allKeystrokes, cfg), wpmNetV, cfg);
+  const tradeoffPoints = extractTradeoffPoints(allKeystrokes, cfg);
+  const tradeoff = fitTradeoff(tradeoffPoints, wpmNetV, cfg);
   const bottlenecks = bottleneckStats(window, params);
+  const habits = detectHabits(
+    {
+      params,
+      observations: window,
+      sessionMetrics,
+      tradeoff,
+      tradeoffPoints,
+      ...(input.handRatioHistory ? { handRatioHistory: input.handRatioHistory } : {}),
+    },
+    cfg,
+  );
 
   const confidenceNotes = [...notes];
   if (sessionMetrics.timingSuspect) {
@@ -122,7 +137,7 @@ export function analyzeSession(
       findings,
       tradeoff,
       bottlenecks: { patterns: bottlenecks },
-      habits: [], // detectors land with the planner/UI milestones (§15)
+      habits, // the UI surfaces at most one per session (§15.3)
       confidenceNotes,
     },
     params,

@@ -20,3 +20,7 @@ export * from './simulator/loop';
 export * from './curriculum/index';
 export * from './planner/index';
 export * from './live/index';
+export * from './habits/index';
+export * from './coach/templates';
+export * from './coach/stuck';
+export * from './generators/calibration';
