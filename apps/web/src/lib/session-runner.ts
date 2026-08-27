@@ -2,8 +2,8 @@ import {
   analyzeBlock, applyGate, applyReview, blockBoundaryMessage, buildQueue, checkFatigue,
   CONFIG, configHash, createItem, ENGINE_VERSION, gateDecision, generate, geometricMean,
   gradeFromObservations, handIkiRatio, initialCurriculumState, LiveAnalyzer, netWpm,
-  planSession, replanRemaining, SCORE_VERSION, sessionOpenMessage, targetIkiFor,
-  transitionFrequencies, updateComposite,
+  planSession, replanRemaining, SCORE_VERSION, sessionOpenMessage, stageFloorForWpm,
+  targetIkiFor, transitionFrequencies, updateComposite,
   type AnalyzedBlock, type BlockResult, type CurriculumState, type DiagnosisSnapshot,
   type FindingCandidate, type PlannedBlock, type SessionPlan, type SrsItem, type Stage,
 } from "@typing-trainer/engine";
@@ -102,12 +102,20 @@ export class SessionRunner {
       budget: 8,
     });
 
+    // Enter the ladder at the user's measured level (§10.1): a 70 WPM typist
+    // drills real words, not pseudo-words.
+    const measuredWpm =
+      lastSnapshot?.sessionMetrics.wpmNet ??
+      (sessions.length > 0 ? (sessions[sessions.length - 1]!.wpmNet ?? null) : null) ??
+      this.settings.startWpm;
+
     this.plan = planSession({
       minutes,
       snapshot: lastSnapshot,
       belowBar,
       srsQueue: queue,
       stageByPattern: this.curriculum.stageByPattern as Record<string, Stage>,
+      stageFloor: stageFloorForWpm(measuredWpm, this.curriculum.track === "foundations"),
       profile: this.settings.typingProfile,
       seed: (Date.now() ^ this.sessionIndex * 7919) >>> 0,
       mode: mode as never,

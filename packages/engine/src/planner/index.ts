@@ -22,6 +22,8 @@ export interface PlanInput {
   belowBar?: readonly FindingCandidate[];
   srsQueue?: readonly QueueEntry[];
   stageByPattern?: Readonly<Record<string, Stage>>;
+  /** Ladder entry point for patterns with no history (see `stageFloorForWpm`). */
+  stageFloor?: Stage;
   profile: TypingProfileId;
   seed: number;
   mode?: TrainingMode;
@@ -33,9 +35,13 @@ export function planSession(input: PlanInput, cfg: EngineConfig = CONFIG): Sessi
   const secondary = findings[1] ?? null;
   const probe = (input.belowBar ?? []).slice().sort((a, b) => b.estWpmCost - a.estWpmCost)[0] ?? null;
 
+  // Untracked patterns enter the ladder at the user's level, not at the
+  // bottom (§10.1). A pattern that has been demoted keeps its earned stage —
+  // the floor is an entry point, not a clamp.
+  const entryStage = input.stageFloor ?? 1;
   const stageFor = (patterns: readonly string[]): Stage => {
     if (patterns.length === 0) return 4;
-    const stages = patterns.map((p) => input.stageByPattern?.[p] ?? 1);
+    const stages = patterns.map((p) => input.stageByPattern?.[p] ?? entryStage);
     return Math.min(...stages) as Stage;
   };
 

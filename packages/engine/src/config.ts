@@ -113,6 +113,17 @@ export const CONFIG = deepFreeze({
     /** Demotion gate. §10.2 */
     demoteAccuracy: 0.93,
     demoteObsWindow: 20,
+    /**
+     * Where a pattern *enters* the ladder, by measured net WPM. Someone who
+     * already types 70 WPM should be drilling real words and phrases, not
+     * `riom piol niot` — the same principle as §11.2 skipping Foundations at
+     * 50+. Promotion/demotion still moves them from here on evidence.
+     */
+    stageFloorByWpm: [
+      [0, 0], [20, 1], [30, 2], [70, 3],
+    ] as ReadonlyArray<readonly [number, number]>,
+    /** Used when no measurement exists yet (adults who can type at all). */
+    defaultStageFloor: 2,
     /** Generator target density: occurrences per 100 chars, ±tolerance. §10.3 */
     defaultTargetDensity: 18,
     densityTolerance: 0.20,

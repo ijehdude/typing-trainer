@@ -230,6 +230,25 @@ export function newPatternCandidates(state: CurriculumState, layout: Layout): st
   });
 }
 
+/**
+ * Where targeted practice starts on the content ladder for this user (§10.1).
+ * Foundations users stay low — they are still learning key locations — but a
+ * fluent typist begins at real words or phrases, never at pseudo-words.
+ */
+export function stageFloorForWpm(
+  wpm: number | null,
+  inFoundations: boolean,
+  cfg: EngineConfig = CONFIG,
+): Stage {
+  if (inFoundations) return 1;
+  if (wpm === null || !Number.isFinite(wpm)) return cfg.content.defaultStageFloor as Stage;
+  let floor = 0;
+  for (const [threshold, stage] of cfg.content.stageFloorByWpm) {
+    if (wpm >= threshold) floor = stage;
+  }
+  return floor as Stage;
+}
+
 export function advanceUnit(state: CurriculumState): CurriculumState {
   const idx = CURRICULUM.findIndex((u) => u.id === state.unitId);
   const next = CURRICULUM[idx + 1];
