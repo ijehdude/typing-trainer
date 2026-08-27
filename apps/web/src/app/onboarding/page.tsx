@@ -9,6 +9,7 @@ import {
 } from "@typing-trainer/engine";
 import { TypingSurface } from "@/components/typing-surface";
 import { runSessionAnalysis } from "@/lib/analysis-client";
+import { capture } from "@/lib/analytics";
 import {
   db, kvSet, packObservations, saveSettings, uuid, type AppSettings,
 } from "@/lib/db";
@@ -115,6 +116,11 @@ export default function OnboardingPage() {
         goalWpm: Math.round(snap.sessionMetrics.wpmNet + 20),
       });
       setStep({ name: "diagnosis", message, snapshot: snap });
+      void capture("onboarding_completed", {
+        wpm: Math.round(snap.sessionMetrics.wpmNet),
+        profile,
+        layoutId,
+      });
     },
     [layoutId, profile],
   );

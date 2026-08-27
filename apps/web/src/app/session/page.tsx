@@ -7,8 +7,10 @@ import { sessionCloseMessage } from "@typing-trainer/engine";
 import { Keyboard } from "@/components/keyboard";
 import { SkillBars } from "@/components/skill-bars";
 import { TypingSurface } from "@/components/typing-surface";
+import { capture } from "@/lib/analytics";
 import { completedSessions, kvSet } from "@/lib/db";
 import { SessionRunner, type BlockOutcome, type SessionOutcome } from "@/lib/session-runner";
+import { drainSync } from "@/lib/sync";
 import type { TypingController } from "@/lib/typing/controller";
 
 import type { PlannedBlock } from "@typing-trainer/engine";
@@ -85,13 +87,47 @@ function SessionFlow() {
           wpmPerSession: rate,
         });
         setPhase({ name: "report", outcome, closeMessage });
+        void capture("session_completed", {
+          mode,
+          minutes,
+          wpmNet: outcome.snapshot.sessionMetrics.wpmNet,
+          speedTestWpm: outcome.speedTestWpm,
+          findings: outcome.snapshot.findings.length,
+        });
+        void drainSync();
+        // LLM narration is an optional enhancement over the template (§19.6):
+        // if the route has a key and the output validates, swap the prose in.
+        void fetch("/api/coach", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "session",
+            snapshot: {
+              sessionMetrics: outcome.snapshot.sessionMetrics,
+              findings: outcome.snapshot.findings,
+              speedTestWpm: outcome.speedTestWpm,
+              prevWpm: outcome.prevWpm,
+              goal,
+            },
+            templateText: closeMessage,
+          }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data: { text: string | null } | null) => {
+            if (data?.text) {
+              setPhase((p) =>
+                p.name === "report" ? { ...p, closeMessage: data.text! } : p,
+              );
+            }
+          })
+          .catch(() => {});
       })();
       return;
     }
     batchFromRef.current = 0;
     const text = runner.blockInitialText();
     setPhase({ name: "block", text, index: runner.completedCount, block: runner.currentBlock! });
-  }, []);
+  }, [minutes, mode]);
 
   // Block driver: lookahead top-up, live loop, time budget (§13).
   const blockIndex = phase.name === "block" ? phase.index : -1;
@@ -253,6 +289,7 @@ function SessionFlow() {
 
 function rateDiagnosis(outcome: SessionOutcome, rating: 1 | -1, setRated: (b: boolean) => void) {
   void kvSet(`diagnosisRating:${outcome.sessionId}`, rating);
+  void capture("diagnosis_rated", { rating }); // §4.3 diagnosis usefulness
   setRated(true);
 }
 

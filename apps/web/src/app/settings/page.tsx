@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LAYOUTS } from "@typing-trainer/content";
 import { db, getSettings, saveSettings, type AppSettings } from "@/lib/db";
+import { drainSync, getSupabase, syncConfigured } from "@/lib/sync";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -88,6 +89,8 @@ export default function SettingsPage() {
         </label>
       </section>
 
+      <AccountSection />
+
       <section className="rounded-lg border border-border bg-surface p-8">
         <h2 className="text-xs font-medium uppercase tracking-widest text-muted">Your data</h2>
         <p className="mt-2 text-sm text-muted">
@@ -118,6 +121,83 @@ export default function SettingsPage() {
         </div>
       </section>
     </Shell>
+  );
+}
+
+/**
+ * Save-your-progress (PRD §18.2, §19.5): offered, never required. Rendered
+ * only when Supabase is configured; anonymous local-only mode is the default.
+ */
+function AccountSection() {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "sent" | "signed-in">("idle");
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.email) {
+        setUserEmail(data.user.email);
+        setStatus("signed-in");
+        void drainSync();
+      }
+    });
+  }, []);
+
+  if (!syncConfigured()) return null;
+
+  return (
+    <section className="rounded-lg border border-border bg-surface p-8">
+      <h2 className="text-xs font-medium uppercase tracking-widest text-muted">Account</h2>
+      {status === "signed-in" ? (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <span>
+            Signed in as <span className="font-mono">{userEmail}</span> — your progress syncs
+            automatically.
+          </span>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              void getSupabase()?.auth.signOut().then(() => {
+                setStatus("idle");
+                setUserEmail(null);
+              });
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      ) : status === "sent" ? (
+        <p className="mt-3 text-sm text-muted">
+          Check your email for a sign-in link. Your local progress will migrate to the account
+          automatically.
+        </p>
+      ) : (
+        <form
+          className="mt-3 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const supabase = getSupabase();
+            if (!supabase || !email) return;
+            void supabase.auth
+              .signInWithOtp({ email, options: { emailRedirectTo: window.location.origin + "/settings" } })
+              .then(() => setStatus("sent"));
+          }}
+        >
+          <input
+            type="email"
+            required
+            placeholder="you@example.com"
+            className="flex-1 rounded-md border border-border bg-surface-2 p-2 text-sm"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <button type="submit" className="btn-ghost">Save my progress</button>
+        </form>
+      )}
+    </section>
   );
 }
 

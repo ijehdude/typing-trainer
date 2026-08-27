@@ -10,6 +10,7 @@ import {
   completedSessions, getCurriculumState, getSettings, kvGet, loadSrsItems,
   type AppSettings,
 } from "@/lib/db";
+import { ensureSyncListeners } from "@/lib/sync";
 
 /** The home screen (PRD §18.3): the decision is made for you. */
 export default function Home() {
@@ -24,6 +25,7 @@ export default function Home() {
   const [showModes, setShowModes] = useState(false);
 
   useEffect(() => {
+    ensureSyncListeners();
     void (async () => {
       const settings = await getSettings();
       if (!settings.onboarded) {

@@ -23,4 +23,5 @@ export * from './live/index';
 export * from './habits/index';
 export * from './coach/templates';
 export * from './coach/stuck';
+export * from './coach/validate';
 export * from './generators/calibration';

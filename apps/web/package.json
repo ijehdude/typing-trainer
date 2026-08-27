@@ -11,6 +11,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
+    "@supabase/supabase-js": "^2.112.4",
     "@tanstack/react-query": "^5.62.0",
     "@typing-trainer/content": "workspace:*",
     "@typing-trainer/engine": "workspace:*",
