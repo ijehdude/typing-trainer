@@ -76,7 +76,8 @@ export class SessionRunner {
     return this.layoutIdInternal;
   }
 
-  async init(minutes: number, mode = "autopilot"): Promise<void> {
+  /** Session length is fixed by CONFIG.planner.sessionMinutes — never a parameter. */
+  async init(mode = "autopilot"): Promise<void> {
     this.settings = await getSettings();
     this.layoutIdInternal = this.settings.layoutId;
     const layout = getLayout(this.layoutIdInternal);
@@ -110,7 +111,6 @@ export class SessionRunner {
       this.settings.startWpm;
 
     this.plan = planSession({
-      minutes,
       snapshot: lastSnapshot,
       belowBar,
       srsQueue: queue,
@@ -144,7 +144,7 @@ export class SessionRunner {
 
     this.openMessage = sessionOpenMessage({
       lastFinding: lastSnapshot?.findings[0] ?? null,
-      plannedMinutes: minutes,
+      plannedMinutes: CONFIG.planner.sessionMinutes,
       sessionsCompleted: sessions.length,
     });
 
@@ -159,7 +159,7 @@ export class SessionRunner {
       startedAt: this.startedAt,
       endedAt: null,
       mode,
-      plannedMinutes: minutes,
+      plannedMinutes: CONFIG.planner.sessionMinutes,
       engineVersion: ENGINE_VERSION,
       scoreVersion: SCORE_VERSION,
       configHash: configHash(),

@@ -38,10 +38,10 @@ describe('nobody is ever shown pseudo-words (§10.1 minStage)', () => {
   it('every planned block, at every level, renders real language', () => {
     for (const wpm of [15, 38, 72, 120]) {
       const floor = stageFloorForWpm(wpm, false);
-      for (const minutes of [5, 10, 15, 25]) {
-        const plan = planSession({ minutes, snapshot: null, profile: 'writer', seed: 4242, stageFloor: floor });
+      {
+        const plan = planSession({ snapshot: null, profile: 'writer', seed: 4242, stageFloor: floor });
         for (const b of plan.blocks) {
-          expect(b.stage, `${wpm}wpm ${minutes}min "${b.label}"`).toBeGreaterThanOrEqual(CONFIG.content.minStage);
+          expect(b.stage, `${wpm}wpm "${b.label}"`).toBeGreaterThanOrEqual(CONFIG.content.minStage);
           const text = generate({
             stage: b.stage, targets: b.targets, length: 220,
             profile: b.profile, seed: b.seed, difficulty: 0.5,
@@ -55,7 +55,6 @@ describe('nobody is ever shown pseudo-words (§10.1 minStage)', () => {
 
   it('probe blocks are real words too, not isolating drills', () => {
     const plan = planSession({
-      minutes: 15,
       snapshot: {
         sessionMetrics: {
           wpmNet: 70, wpmRaw: 76, accuracy: 0.97, consistency: 88, rhythm: 80,
@@ -85,8 +84,7 @@ describe('nobody is ever shown pseudo-words (§10.1 minStage)', () => {
   });
 
   it('repeated failure eases difficulty without falling into pseudo-words', () => {
-    const remaining = planSession({
-      minutes: 15, snapshot: null, profile: 'writer', seed: 3, stageFloor: 2,
+    const remaining = planSession({ snapshot: null, profile: 'writer', seed: 3, stageFloor: 2,
     }).blocks.filter((b) => b.kind === 'target');
     const failed = (o: number, targets: string[]): BlockResult => ({
       ordinal: o, kind: 'target', targets, wpmNet: 60, accuracy: 0.9, targetMet: false,
@@ -111,8 +109,7 @@ describe('nobody is ever shown pseudo-words (§10.1 minStage)', () => {
   });
 
   it('a demoted pattern still keeps its earned stage below the entry point', () => {
-    const plan = planSession({
-      minutes: 15, snapshot: null, profile: 'writer', seed: 1,
+    const plan = planSession({ snapshot: null, profile: 'writer', seed: 1,
       stageFloor: 4, stageByPattern: { th: 2 }, // struggled at phrases, back to words
     });
     const withTh = plan.blocks.find((b) => b.targets.includes('th'));

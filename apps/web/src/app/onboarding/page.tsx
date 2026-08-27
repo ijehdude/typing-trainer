@@ -198,7 +198,7 @@ export default function OnboardingPage() {
         <button
           type="button"
           className="btn-primary mt-8"
-          onClick={() => router.push("/session?minutes=15")}
+          onClick={() => router.push("/session")}
           autoFocus
         >
           Start the session

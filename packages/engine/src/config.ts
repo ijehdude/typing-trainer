@@ -149,8 +149,10 @@ export const CONFIG = deepFreeze({
   },
 
   planner: {
-    sessionMinutes: [5, 10, 15, 25] as readonly number[],
-    defaultSessionMinutes: 15,
+    /** Every block is exactly this long. There are no other durations. */
+    blockMinutes: 1,
+    /** The one and only session length: practice + speed test. Not a default. */
+    sessionMinutes: 2,
     /** Fatigue: within-session decline from peak across 2 blocks. §12.3 */
     fatigueDeclinePct: 0.08,
     microRestSeconds: 30,

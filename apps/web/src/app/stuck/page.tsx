@@ -98,7 +98,7 @@ export default function StuckPage() {
                     prescription: top.prescription,
                     sessionsLeft: top.prescription.sessions,
                     startedAt: Date.now(),
-                  }).then(() => router.push("/session?minutes=15"));
+                  }).then(() => router.push("/session"));
                 }}
               >
                 Start this plan

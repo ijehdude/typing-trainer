@@ -17,7 +17,6 @@ import type { PlannedBlock, SessionPlan, BlockResult } from './types';
  */
 
 export interface PlanInput {
-  minutes: number;                       // 5 | 10 | 15 | 25
   snapshot: DiagnosisSnapshot | null;    // null = cold start
   belowBar?: readonly FindingCandidate[];
   srsQueue?: readonly QueueEntry[];
@@ -33,7 +32,13 @@ export function planSession(input: PlanInput, cfg: EngineConfig = CONFIG): Sessi
   const findings = input.snapshot?.findings ?? [];
   const primary = findings[0] ?? null;
   const secondary = findings[1] ?? null;
-  const probe = (input.belowBar ?? []).slice().sort((a, b) => b.estWpmCost - a.estWpmCost)[0] ?? null;
+  // A probe spends the whole practice minute, so it must have something
+  // trainable to spend it on — class-level candidates (e.g. same-finger
+  // bigrams) carry no patterns and would gather nothing.
+  const probe =
+    (input.belowBar ?? [])
+      .filter((c) => c.patterns.some((p) => p.length <= 3))
+      .sort((a, b) => b.estWpmCost - a.estWpmCost)[0] ?? null;
 
   // Untracked patterns enter the ladder at the user's level, not at the
   // bottom (§10.1). A pattern that has been demoted keeps its earned stage —
@@ -84,36 +89,23 @@ export function planSession(input: PlanInput, cfg: EngineConfig = CONFIG): Sessi
     });
   };
 
-  const m = input.minutes;
-  if (m <= 5) {
-    push('warmup', 1, 4, [], { scored: false, label: 'Warm-up' });
-    push('target', 3, stageFor(primaryTargets), primaryTargets);
-    push('test', 1, 5, [], { label: 'Speed test' });
-  } else if (m <= 10) {
-    push('warmup', 2, 4, [], { scored: false, label: 'Warm-up' });
-    push('target', 4, stageFor(primaryTargets), primaryTargets);
-    push('transfer', 3, 5, primaryTargets, { label: 'Real-world transfer' });
-    push('test', 1, 5, [], { label: 'Speed test' });
-  } else if (m <= 15) {
-    push('warmup', 2, 4, [], { scored: false, label: 'Warm-up' });
-    push('target', 4, stageFor(primaryTargets), primaryTargets);
-    if (probe && findings.length < 2) {
-      push('probe', 1.5, entryStage, probe.patterns.slice(0, 2), { label: 'Quick check' });
-      push('target', 1.5, stageFor(secondaryTargets), secondaryTargets);
-    } else {
-      push('target', 3, stageFor(secondaryTargets), secondaryTargets);
-    }
-    push('transfer', 5, 5, primaryTargets, { label: 'Real-world transfer' });
-    push('test', 1, 5, [], { label: 'Speed test' });
+  // One session, always: a minute of practice then a minute of measurement.
+  // Every block is exactly `blockMinutes`; there is no duration choice
+  // anywhere in the product. There is no warm-up block — the practice minute
+  // serves as one for the speed test, which is the only scored trend metric
+  // (§12.2) and stays a full minute because milestones are defined against a
+  // 1-minute test (§17.3).
+  const m = cfg.planner.sessionMinutes;
+  const len = cfg.planner.blockMinutes;
+  if (probe && findings.length < 2) {
+    // A probe replaces the practice minute rather than adding time (§12.4).
+    push('probe', len, entryStage, probe.patterns.filter((p) => p.length <= 3).slice(0, 2), {
+      label: 'Quick check',
+    });
   } else {
-    push('warmup', 2, 4, [], { scored: false, label: 'Warm-up' });
-    push('target', 4, stageFor(primaryTargets), primaryTargets);
-    push('target', 3, stageFor(secondaryTargets), secondaryTargets);
-    push('target', 4, stageFor(primaryTargets), primaryTargets, { label: 'Primary target, round 2' });
-    push('transfer', 5, 5, primaryTargets, { label: 'Real-world transfer' });
-    push('transfer', 6, 5, [], { label: 'Endurance' });
-    push('test', 1, 5, [], { label: 'Speed test' });
+    push('target', len, stageFor(primaryTargets), primaryTargets);
   }
+  push('test', len, 5, [], { label: 'Speed test' });
 
   applyModeOverrides(blocks, input.mode ?? 'autopilot');
   enforceInvariants(blocks, cfg);
@@ -159,8 +151,11 @@ function enforceInvariants(blocks: readonly PlannedBlock[], cfg: EngineConfig): 
   if (!test || test.kind !== 'test' || test.targets.length > 0 || test.stage !== 5) {
     throw new Error('planner invariant: last block must be an untargeted stage-5 speed test');
   }
-  if (blocks[0]!.kind !== 'warmup' || blocks[0]!.scored) {
-    throw new Error('planner invariant: first block must be an unscored warm-up');
+  if (blocks.some((b) => b.minutes !== cfg.planner.blockMinutes)) {
+    throw new Error('planner invariant: every block is exactly blockMinutes long');
+  }
+  if (blocks.reduce((s, b) => s + b.minutes, 0) !== cfg.planner.sessionMinutes) {
+    throw new Error('planner invariant: the session is exactly sessionMinutes long');
   }
   const belowMin = blocks.find((b) => b.stage < cfg.content.minStage);
   if (belowMin) {

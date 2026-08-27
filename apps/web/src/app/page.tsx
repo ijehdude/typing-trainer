@@ -10,6 +10,7 @@ import {
   completedSessions, getCurriculumState, getSettings, kvGet, loadSrsItems,
   type AppSettings,
 } from "@/lib/db";
+import { formatDuration } from "@/lib/format";
 import { ensureSyncListeners } from "@/lib/sync";
 
 /** The home screen (PRD §18.3): the decision is made for you. */
@@ -20,7 +21,6 @@ export default function Home() {
     lastWpm: number | null;
     sessions: number;
   } | null>(null);
-  const [minutes, setMinutes] = useState(15);
   const [mode, setMode] = useState("autopilot");
   const [showModes, setShowModes] = useState(false);
 
@@ -43,7 +43,6 @@ export default function Home() {
         items, costs: new Map(), newCandidates: [], now: Date.now(), budget: 8,
       });
       const plan = planSession({
-        minutes: 15,
         snapshot,
         belowBar: belowBar ?? [],
         srsQueue: queue,
@@ -114,24 +113,15 @@ export default function Home() {
           {plan?.blocks.map((b) => (
             <li key={b.ordinal} className="flex justify-between gap-8">
               <span>{b.label}</span>
-              <span className="font-mono text-muted">{b.minutes} min</span>
+              <span className="font-mono text-muted">{formatDuration(b.minutes)}</span>
             </li>
           ))}
         </ol>
         <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
-          <div className="flex gap-1">
-            {[5, 10, 15, 25].map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMinutes(m)}
-                className={`rounded px-2.5 py-1 font-mono text-xs ${minutes === m ? "bg-accent text-background" : "text-muted hover:text-foreground"}`}
-              >
-                {m}m
-              </button>
-            ))}
-          </div>
-          <Link href={`/session?minutes=${minutes}&mode=${mode}`} className="btn-primary" data-testid="start-session">
+          <span className="font-mono text-xs text-muted">
+            TOTAL {plan?.minutes ?? 2} min
+          </span>
+          <Link href={`/session?mode=${mode}`} className="btn-primary" data-testid="start-session">
             Start
           </Link>
         </div>

@@ -26,7 +26,6 @@ export interface LoopOptions {
   typist: TypistProfile;
   layout: Layout;
   sessions: number;
-  minutes?: number;
   profile?: TypingProfileId;
   seed: number;
   /** Characters generated per planned minute (scaled down for fast tests). */
@@ -49,7 +48,6 @@ const DAY_MS = 86_400_000;
 export function runTrainingLoop(opts: LoopOptions): SessionRecord[] {
   const cfg = opts.cfg ?? CONFIG;
   const layout = opts.layout;
-  const minutes = opts.minutes ?? 15;
   const cpm = opts.charsPerMinute ?? 80;
   const profile = opts.profile ?? 'writer';
   const records: SessionRecord[] = [];
@@ -83,7 +81,6 @@ export function runTrainingLoop(opts: LoopOptions): SessionRecord[] {
 
     const plan = planSession(
       {
-        minutes,
         snapshot,
         belowBar,
         srsQueue: queue,

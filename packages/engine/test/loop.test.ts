@@ -15,17 +15,16 @@ describe('training loop end-to-end', () => {
       typist: COHORT['rapidLearner']!,
       layout: qwertyUs,
       sessions: 10,
-      minutes: 15,
       profile: 'writer',
       seed: 4242,
-      charsPerMinute: 60,
+      charsPerMinute: 350, // a real typist produces ~350 chars/min; less under-samples the 1-min speed test
       trainingEffect: 0.9,
     });
 
     expect(records).toHaveLength(10);
     for (const r of records) {
       // Every plan valid from any state, including cold start (§23 acceptance).
-      expect(r.plan.blocks[0]!.kind).toBe('warmup');
+      expect(r.plan.blocks).toHaveLength(2);
       expect(r.plan.blocks[r.plan.blocks.length - 1]!.kind).toBe('test');
       expect(r.speedTestWpm).toBeGreaterThan(10);
       expect(r.trainedPatterns.length).toBeGreaterThan(0);
@@ -47,14 +46,13 @@ describe('training loop end-to-end', () => {
         typist,
         layout: qwertyUs,
         sessions: 3,
-        minutes: 10,
         profile: 'writer',
         seed: 77,
-        charsPerMinute: 40,
+        charsPerMinute: 250,
       });
       expect(records, name).toHaveLength(3);
       for (const r of records) {
-        expect(r.plan.blocks.length, name).toBeGreaterThanOrEqual(3);
+        expect(r.plan.blocks.length, name).toBe(2);
         expect(r.snapshot.sessionMetrics.keystrokes, name).toBeGreaterThan(0);
       }
     }
@@ -66,10 +64,9 @@ describe('training loop end-to-end', () => {
         typist: COHORT['burstTypist']!,
         layout: qwertyUs,
         sessions: 3,
-        minutes: 5,
         profile: 'developer',
         seed: 99,
-        charsPerMinute: 40,
+        charsPerMinute: 250,
       });
     const a = run();
     const b = run();

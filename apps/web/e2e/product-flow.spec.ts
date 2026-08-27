@@ -50,12 +50,13 @@ test("onboarding → first diagnosis → full session → report", async ({ page
   expect(diagnosis).toMatch(/You type at \d+ WPM/);
   expect(diagnosis).toMatch(/accuracy is \d/);
 
-  // The first session, with capped block budgets for e2e speed.
-  await page.goto("/session?minutes=5&blockSec=4");
+  // The one fixed-length session, with capped block budgets for e2e speed.
+  await page.goto("/session?blockSec=4");
   await expect(page.getByTestId("session-open")).toBeVisible({ timeout: 20_000 });
   const openText = await page.getByTestId("session-open").textContent();
-  expect(openText).toMatch(/Warm-up/);
   expect(openText).toMatch(/Speed test/);
+  // One fixed session shape: two 1-minute blocks, no duration choice anywhere.
+  expect(openText).toMatch(/1 min[\s\S]*1 min/);
   await page.getByRole("button", { name: "Start" }).click();
 
   // Single driver loop: type in blocks, continue at boundaries, stop at report.

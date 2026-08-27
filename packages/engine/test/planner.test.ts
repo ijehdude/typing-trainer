@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CONFIG } from '../src/config';
 import { checkFatigue, planSession, replanRemaining } from '../src/planner/index';
 import type { BlockResult, PlannedBlock } from '../src/planner/index';
 import type { DiagnosisSnapshot, Finding } from '../src/types';
@@ -29,18 +30,20 @@ const finding = (cause: string, patterns: string[], cost: number): Finding => ({
 });
 
 describe('Autopilot planner (PRD §12)', () => {
-  it.each([5, 10, 15, 25])('produces a valid %d-minute plan from a diagnosis', (minutes) => {
+  it('produces one fixed-length plan from a diagnosis', () => {
     const plan = planSession({
-      minutes,
       snapshot: fakeSnapshot([finding('bigram:io', ['io'], 4.2), finding('finger:RP', ['p', ';'], 2.1)]),
       profile: 'developer',
       seed: 42,
     });
+    // There is exactly one session length, and the blocks add up to it.
+    expect(plan.minutes).toBe(CONFIG.planner.sessionMinutes);
     const total = plan.blocks.reduce((s, b) => s + b.minutes, 0);
-    expect(Math.abs(total - minutes)).toBeLessThanOrEqual(1);
-    // Invariants (§12.2): unscored warm-up first, untargeted stage-5 test last.
-    expect(plan.blocks[0]!.kind).toBe('warmup');
-    expect(plan.blocks[0]!.scored).toBe(false);
+    expect(total).toBeCloseTo(CONFIG.planner.sessionMinutes, 5);
+    // Every block is exactly one minute — the only duration in the product.
+    expect(plan.blocks).toHaveLength(2);
+    for (const b of plan.blocks) expect(b.minutes).toBe(CONFIG.planner.blockMinutes);
+    // Invariant (§12.2): the untargeted stage-5 speed test comes last.
     const last = plan.blocks[plan.blocks.length - 1]!;
     expect(last.kind).toBe('test');
     expect(last.targets).toEqual([]);
@@ -51,8 +54,8 @@ describe('Autopilot planner (PRD §12)', () => {
   });
 
   it('produces a valid, varied plan from cold start (no model state)', () => {
-    const a = planSession({ minutes: 15, snapshot: null, profile: 'writer', seed: 1 });
-    expect(a.blocks.length).toBeGreaterThanOrEqual(4);
+    const a = planSession({ snapshot: null, profile: 'writer', seed: 1 });
+    expect(a.blocks).toHaveLength(2);
     const targets = a.blocks.filter((b) => b.kind === 'target');
     expect(targets.length).toBeGreaterThan(0);
     for (const t of targets) expect(t.targets.length).toBeGreaterThan(0);
@@ -62,7 +65,6 @@ describe('Autopilot planner (PRD §12)', () => {
 
   it('schedules a probe when a costly candidate lacks confidence (§12.4)', () => {
     const plan = planSession({
-      minutes: 15,
       snapshot: fakeSnapshot([finding('bigram:io', ['io'], 4.2)]),
       belowBar: [{
         cause: 'finger:RP', label: 'Right pinky', evidence: '', estWpmCost: 3.0,
@@ -78,7 +80,6 @@ describe('Autopilot planner (PRD §12)', () => {
 
   it('SRS due patterns join the primary block', () => {
     const plan = planSession({
-      minutes: 15,
       snapshot: fakeSnapshot([finding('bigram:io', ['io'], 4.2)]),
       srsQueue: [{ pattern: 'rt', patternType: 'bigram', source: 'due' }],
       profile: 'writer',

@@ -10,6 +10,7 @@ import { TypingSurface } from "@/components/typing-surface";
 import { capture } from "@/lib/analytics";
 import { completedSessions, kvSet } from "@/lib/db";
 import { SessionRunner, type BlockOutcome, type SessionOutcome } from "@/lib/session-runner";
+import { formatDuration } from "@/lib/format";
 import { drainSync } from "@/lib/sync";
 import type { TypingController } from "@/lib/typing/controller";
 
@@ -34,8 +35,9 @@ export default function SessionPage() {
 function SessionFlow() {
   const params = useSearchParams();
   const router = useRouter();
-  const minutes = Number(params.get("minutes") ?? 15);
   const mode = params.get("mode") ?? "autopilot";
+  // Session length is fixed by the engine; there is deliberately no way to
+  // request a different one, including via the URL.
   // e2e escape hatch: cap each block's active-time budget (seconds).
   const blockSec = params.get("blockSec");
 
@@ -54,7 +56,7 @@ function SessionFlow() {
     if (blockSec) r.blockBudgetMsOverride = Number(blockSec) * 1000;
     runnerRef.current = r;
     let cancelled = false;
-    r.init(minutes, mode).then(() => {
+    r.init(mode).then(() => {
       if (!cancelled) {
         setRunner(r);
         setPhase({ name: "open" });
@@ -63,7 +65,7 @@ function SessionFlow() {
     return () => {
       cancelled = true;
     };
-  }, [minutes, mode, blockSec]);
+  }, [mode, blockSec]);
 
   const startNextBlock = useCallback(() => {
     const runner = runnerRef.current!;
@@ -89,7 +91,7 @@ function SessionFlow() {
         setPhase({ name: "report", outcome, closeMessage });
         void capture("session_completed", {
           mode,
-          minutes,
+          minutes: runner.plan.minutes,
           wpmNet: outcome.snapshot.sessionMetrics.wpmNet,
           speedTestWpm: outcome.speedTestWpm,
           findings: outcome.snapshot.findings.length,
@@ -127,7 +129,7 @@ function SessionFlow() {
     batchFromRef.current = 0;
     const text = runner.blockInitialText();
     setPhase({ name: "block", text, index: runner.completedCount, block: runner.currentBlock! });
-  }, [minutes, mode]);
+  }, [mode]);
 
   // Block driver: lookahead top-up, live loop, time budget (§13).
   const blockIndex = phase.name === "block" ? phase.index : -1;
@@ -163,7 +165,7 @@ function SessionFlow() {
             {runner.plan.blocks.map((b) => (
               <li key={b.ordinal} className="flex justify-between gap-8">
                 <span>{b.label}</span>
-                <span className="font-mono">{b.minutes} min</span>
+                <span className="font-mono">{formatDuration(b.minutes)}</span>
               </li>
             ))}
           </ol>
@@ -183,7 +185,7 @@ function SessionFlow() {
           <span>
             {block.label} · block {phase.index + 1} of {runner.totalBlocks}
           </span>
-          <span>{block.minutes} min</span>
+          <span>{formatDuration(block.minutes)}</span>
         </div>
         <TypingSurface
           key={phase.index}
