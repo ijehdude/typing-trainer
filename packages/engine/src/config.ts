@@ -58,6 +58,14 @@ export const CONFIG = deepFreeze({
     /** Weak-key control: worst-N keys vs own median. §8.2 */
     weakKeyWorstN: 5,
     weakKeyMinObs: 20,
+    /**
+     * Distinct keys that must clear `weakKeyMinObs` before the dimension is
+     * reported at all. Below this the sample is all high-frequency keys,
+     * which are also the fastest, and the score reads as a false 1.00.
+     */
+    weakKeyMinKeys: 12,
+    /** Observations needed per character class before punctuation is scored. */
+    punctMinObs: 20,
     /** Composite weights. §8.3 */
     weights: {
       speed: 0.30,

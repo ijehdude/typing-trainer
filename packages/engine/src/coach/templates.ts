@@ -26,22 +26,40 @@ export function sessionOpenMessage(args: {
 
 export function sessionCloseMessage(args: {
   snapshot: DiagnosisSnapshot;
-  prevWpm: number | null;
+  /**
+   * This session's speed-test WPM, and the previous session's. Both sides of
+   * the comparison MUST be the speed test: it is the only untargeted, fixed
+   * methodology measurement, and session-net WPM is inflated by the drill
+   * content (§12.2). Comparing net against a prior speed test invents gains.
+   */
+  speedTestWpm: number | null;
+  prevSpeedTestWpm: number | null;
   nextMilestoneWpm: number | null;
   /** Measured WPM change per session over the trailing window; null if thin. */
   wpmPerSession: number | null;
 }): string {
-  const { snapshot, prevWpm } = args;
-  const wpm = snapshot.sessionMetrics.wpmNet;
+  const { snapshot, speedTestWpm, prevSpeedTestWpm } = args;
   const lines: string[] = [];
 
-  if (prevWpm !== null) {
-    const delta = wpm - prevWpm;
-    if (delta >= 0.5) lines.push(`You finished at ${r1(wpm)} WPM, up ${r1(delta)} from last session.`);
-    else if (delta <= -0.5) lines.push(`You finished at ${r1(wpm)} WPM, down ${r1(Math.abs(delta))} from last session. One session is noise, not a trend.`);
-    else lines.push(`You finished at ${r1(wpm)} WPM, level with last session.`);
+  if (speedTestWpm === null) {
+    lines.push(
+      `No speed test in this session, so there's no trend reading — practice accuracy was ${r1(snapshot.sessionMetrics.accuracy * 100)}%.`,
+    );
+  } else if (prevSpeedTestWpm !== null) {
+    const delta = speedTestWpm - prevSpeedTestWpm;
+    if (delta >= 0.5) {
+      lines.push(`Speed test: ${r1(speedTestWpm)} WPM, up ${r1(delta)} from last session.`);
+    } else if (delta <= -0.5) {
+      lines.push(
+        `Speed test: ${r1(speedTestWpm)} WPM, down ${r1(Math.abs(delta))} from last session. One session is noise, not a trend.`,
+      );
+    } else {
+      lines.push(`Speed test: ${r1(speedTestWpm)} WPM, level with last session.`);
+    }
   } else {
-    lines.push(`Baseline recorded: ${r1(wpm)} WPM at ${r1(snapshot.sessionMetrics.accuracy * 100)}% accuracy.`);
+    lines.push(
+      `Baseline recorded: ${r1(speedTestWpm)} WPM at ${r1(snapshot.sessionMetrics.accuracy * 100)}% accuracy.`,
+    );
   }
 
   const top = snapshot.findings[0];
@@ -51,8 +69,15 @@ export function sessionCloseMessage(args: {
     lines.push(`Not enough data yet to name your bottleneck with confidence — the next session gathers what's missing.`);
   }
 
-  if (args.nextMilestoneWpm !== null && args.wpmPerSession !== null && args.wpmPerSession > 0.05) {
-    const gap = args.nextMilestoneWpm - wpm;
+  if (
+    args.nextMilestoneWpm !== null &&
+    args.wpmPerSession !== null &&
+    args.wpmPerSession > 0.05 &&
+    speedTestWpm !== null
+  ) {
+    // Milestones are defined against the 1-minute speed test (§17.3), so the
+    // gap is measured from that, never from the drill-inflated session net.
+    const gap = args.nextMilestoneWpm - speedTestWpm;
     if (gap > 0) {
       const lo = Math.max(1, Math.ceil(gap / (args.wpmPerSession * 1.5)));
       const hi = Math.ceil(gap / (args.wpmPerSession * 0.6));

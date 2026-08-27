@@ -19,8 +19,8 @@ describe('Skill Profile — §8.1 reference fixture', () => {
     expect(Math.round(profile.accuracy)).toBe(82);     // 97.4% → 82
     expect(Math.round(profile.consistency)).toBe(91);  // CV 0.09 → 91
     expect(Math.round(profile.rhythm)).toBe(84);       // MAD 0.144 → 84
-    expect(Math.round(profile.weakKeyControl)).toBe(73); // 1.37× gap → 73
-    expect(Math.round(profile.punctuation)).toBe(61);
+    expect(Math.round(profile.weakKeyControl!)).toBe(73); // 1.37× gap → 73
+    expect(Math.round(profile.punctuation!)).toBe(61);
     expect(Math.round(profile.overall)).toBe(78);      // composite → 78/100
   });
 });
@@ -47,23 +47,30 @@ describe('dimension formulas (PRD §8.2)', () => {
     expect(accuracyScore(0.85)).toBe(0);
   });
 
-  it('weak-key ratio: perfectly even typist scores 1, 2× worst keys score 0.5', () => {
+  it('weak-key ratio: perfectly even typist scores 1, slow keys pull it down', () => {
+    // Needs ≥ weakKeyMinKeys distinct keys with data, or the dimension is
+    // reported as unmeasured rather than guessed (see honest-metrics.test.ts).
+    const fast = 'abcdefghijklmnop';  // 16 keys
+    const slow = 'qrstu';             // 5 keys
     const even = new Map<string, number[]>();
     const uneven = new Map<string, number[]>();
-    for (const ch of 'abcdefghij') {
+    for (const ch of fast) {
       even.set(ch, Array(25).fill(150));
       uneven.set(ch, Array(25).fill(150));
     }
-    for (const ch of 'klmno') uneven.set(ch, Array(25).fill(300));
-    expect(weakKeyRatioFromKeyIkis(even)).toBeCloseTo(1, 5);
-    // gm across all 15 keys: 150^(10/15)·300^(5/15); worst5 = 300.
-    const expected = Math.exp((10 / 15) * Math.log(150) + (5 / 15) * Math.log(300)) / 300;
-    expect(weakKeyRatioFromKeyIkis(uneven)).toBeCloseTo(expected, 5);
+    for (const ch of slow) uneven.set(ch, Array(25).fill(300));
+
+    expect(weakKeyRatioFromKeyIkis(even)!).toBeCloseTo(1, 5);
+    const n = fast.length + slow.length;
+    const expected =
+      Math.exp((fast.length / n) * Math.log(150) + (slow.length / n) * Math.log(300)) / 300;
+    expect(weakKeyRatioFromKeyIkis(uneven)!).toBeCloseTo(expected, 5);
   });
 
   it('punctuation score clamps at 100 when punct is as fast as letters', () => {
     expect(punctuationScore(1.2)).toBe(100);
-    expect(punctuationScore(0.61)).toBeCloseTo(61, 5);
+    expect(punctuationScore(0.61)!).toBeCloseTo(61, 5);
+    expect(punctuationScore(null)).toBeNull(); // unmeasured is not a perfect score
   });
 });
 

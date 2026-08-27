@@ -165,9 +165,10 @@ export function whyAmIStuck(input: StuckInput, cfg: EngineConfig = CONFIG): Stuc
     });
   }
 
-  // 6 — Character-class gap.
-  const classGap = s.skillProfile.speed - s.skillProfile.punctuation;
-  if (classGap >= cfg.stuck.classGapPoints) {
+  // 6 — Character-class gap. Only claimable once punctuation is measured.
+  const classGap =
+    s.skillProfile.punctuation === null ? 0 : s.skillProfile.speed - s.skillProfile.punctuation;
+  if (s.skillProfile.punctuation !== null && classGap >= cfg.stuck.classGapPoints) {
     causes.push({
       id: 'class_gap',
       headline: 'Punctuation and symbols are far behind your letters.',

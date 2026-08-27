@@ -40,8 +40,8 @@ describe('coach templates (PRD §14.2 voice rules)', () => {
     const messages = [
       sessionOpenMessage({ lastFinding: snapshotWith().findings[0]!, plannedMinutes: 15, sessionsCompleted: 4 }),
       sessionOpenMessage({ lastFinding: null, plannedMinutes: 15, sessionsCompleted: 0 }),
-      sessionCloseMessage({ snapshot: snapshotWith(), prevWpm: 70.1, nextMilestoneWpm: 80, wpmPerSession: 0.5 }),
-      sessionCloseMessage({ snapshot: snapshotWith(), prevWpm: null, nextMilestoneWpm: null, wpmPerSession: null }),
+      sessionCloseMessage({ snapshot: snapshotWith(), speedTestWpm: 74.8, prevSpeedTestWpm: 70.1, nextMilestoneWpm: 80, wpmPerSession: 0.5 }),
+      sessionCloseMessage({ snapshot: snapshotWith(), speedTestWpm: 74.8, prevSpeedTestWpm: null, nextMilestoneWpm: null, wpmPerSession: null }),
       firstDiagnosisMessage({ wpm: 68, accuracy: 0.961, slowTransitions: ['io', 'rt'], estTopCostWpm: 5, topCostLabel: 'Your right pinky' }),
     ];
     for (const m of messages) {
@@ -51,7 +51,7 @@ describe('coach templates (PRD §14.2 voice rules)', () => {
   });
 
   it('estimates are ranges, never points', () => {
-    const m = sessionCloseMessage({ snapshot: snapshotWith(), prevWpm: 70, nextMilestoneWpm: 80, wpmPerSession: 0.5 });
+    const m = sessionCloseMessage({ snapshot: snapshotWith(), speedTestWpm: 72, prevSpeedTestWpm: 70, nextMilestoneWpm: 80, wpmPerSession: 0.5 });
     expect(m).toMatch(/\d+–\d+ sessions/);
   });
 
@@ -64,7 +64,7 @@ describe('coach templates (PRD §14.2 voice rules)', () => {
 
   it('admits thin data instead of inventing a trend', () => {
     const noFindings = snapshotWith({}, { findings: [], confidenceNotes: ['thin'] });
-    const m = sessionCloseMessage({ snapshot: noFindings, prevWpm: null, nextMilestoneWpm: null, wpmPerSession: null });
+    const m = sessionCloseMessage({ snapshot: noFindings, speedTestWpm: 70, prevSpeedTestWpm: null, nextMilestoneWpm: null, wpmPerSession: null });
     expect(m).toMatch(/Not enough data|Baseline/);
   });
 });

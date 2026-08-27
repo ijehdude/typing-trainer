@@ -85,16 +85,19 @@ export function analyzeSession(
   };
 
   // --- skill profile ------------------------------------------------------
+  // Per-key dimensions read from the retained observation window, not just
+  // this session: rare keys and punctuation appear a handful of times per
+  // sitting, so a single short session can only ever see the common keys.
   const ikisByKey = new Map<string, number[]>();
   const alphaIkis: number[] = [];
   const punctIkis: number[] = [];
-  for (const k of allKeystrokes) {
-    if (k.iki === null || k.excludedFromTiming) continue;
-    let arr = ikisByKey.get(k.key);
-    if (!arr) ikisByKey.set(k.key, (arr = []));
-    arr.push(k.iki);
-    if (/[a-z]/.test(k.key)) alphaIkis.push(k.iki);
-    else if (isPunctChar(k.key)) punctIkis.push(k.iki);
+  for (const o of window) {
+    const iki = Math.exp(o.logIki);
+    let arr = ikisByKey.get(o.char);
+    if (!arr) ikisByKey.set(o.char, (arr = []));
+    arr.push(iki);
+    if (/[a-z]/.test(o.char)) alphaIkis.push(iki);
+    else if (isPunctChar(o.char)) punctIkis.push(iki);
   }
   const skillProfile = computeSkillProfile(
     {
@@ -103,7 +106,7 @@ export function analyzeSession(
       cv,
       residualMad: hesitations.residualMad,
       weakKeyRatio: weakKeyRatioFromKeyIkis(ikisByKey, cfg),
-      punctRatio: punctRatioFromIkis(alphaIkis, punctIkis),
+      punctRatio: punctRatioFromIkis(alphaIkis, punctIkis, cfg),
     },
     cfg,
   );

@@ -84,7 +84,8 @@ function SessionFlow() {
         const goal = runner.settings.goalWpm;
         const closeMessage = sessionCloseMessage({
           snapshot: outcome.snapshot,
-          prevWpm: outcome.prevWpm,
+          speedTestWpm: outcome.speedTestWpm,
+          prevSpeedTestWpm: outcome.prevWpm, // previous session's speed test
           nextMilestoneWpm: goal ?? nextSpeedMilestone(outcome.speedTestWpm),
           wpmPerSession: rate,
         });

@@ -12,8 +12,10 @@ export interface SkillRawInputs {
   firstAttemptAccuracy: number; // 0..1
   cv: number;                   // coefficient of variation of per-second WPM
   residualMad: number;          // MAD of model residuals, log space
-  weakKeyRatio: number;         // m_med / m_worst (≤ 1 for a typist with weak keys)
-  punctRatio: number;           // m_alpha / m_punct
+  /** m_med / m_worst (≤ 1 for a typist with weak keys); null = not yet measured. */
+  weakKeyRatio: number | null;
+  /** m_alpha / m_punct; null = not yet measured. */
+  punctRatio: number | null;
 }
 
 export function speedScore(wpm: number, cfg: EngineConfig = CONFIG): number {
@@ -43,12 +45,12 @@ export function rhythmScoreFromMad(residualMad: number, cfg: EngineConfig = CONF
   return 100 * clamp(1 - residualMad / cfg.skill.rhythmMadDivisor, 0, 1);
 }
 
-export function weakKeyScore(weakKeyRatio: number): number {
-  return 100 * clamp(weakKeyRatio, 0, 1);
+export function weakKeyScore(weakKeyRatio: number | null): number | null {
+  return weakKeyRatio === null ? null : 100 * clamp(weakKeyRatio, 0, 1);
 }
 
-export function punctuationScore(punctRatio: number): number {
-  return 100 * clamp(punctRatio, 0, 1);
+export function punctuationScore(punctRatio: number | null): number | null {
+  return punctRatio === null ? null : 100 * clamp(punctRatio, 0, 1);
 }
 
 export function computeSkillProfile(raw: SkillRawInputs, cfg: EngineConfig = CONFIG): SkillProfile {
@@ -58,14 +60,29 @@ export function computeSkillProfile(raw: SkillRawInputs, cfg: EngineConfig = CON
   const rhythm = rhythmScoreFromMad(raw.residualMad, cfg);
   const weakKeyControl = weakKeyScore(raw.weakKeyRatio);
   const punctuation = punctuationScore(raw.punctRatio);
+
+  // A dimension we could not measure is left out of the composite and its
+  // weight redistributed, rather than counted as a perfect score. Scoring an
+  // unmeasured dimension 100 silently inflates the total (PRD G5: never make
+  // a claim the data cannot support).
   const w = cfg.skill.weights;
-  const overall =
-    w.speed * speed +
-    w.accuracy * accuracy +
-    w.consistency * consistency +
-    w.rhythm * rhythm +
-    w.weakKeyControl * weakKeyControl +
-    w.punctuation * punctuation;
+  const parts: Array<[number | null, number]> = [
+    [speed, w.speed],
+    [accuracy, w.accuracy],
+    [consistency, w.consistency],
+    [rhythm, w.rhythm],
+    [weakKeyControl, w.weakKeyControl],
+    [punctuation, w.punctuation],
+  ];
+  let weighted = 0;
+  let totalWeight = 0;
+  for (const [value, weight] of parts) {
+    if (value === null) continue;
+    weighted += value * weight;
+    totalWeight += weight;
+  }
+  const overall = totalWeight > 0 ? weighted / totalWeight : 0;
+
   return { speed, accuracy, consistency, rhythm, weakKeyControl, punctuation, overall, raw };
 }
 
@@ -76,8 +93,8 @@ export function computeSkillProfile(raw: SkillRawInputs, cfg: EngineConfig = CON
 export function weakKeyRatioFromKeyIkis(
   ikisByKey: ReadonlyMap<string, readonly number[]>,
   cfg: EngineConfig = CONFIG,
-): number {
-  const { weakKeyWorstN, weakKeyMinObs } = cfg.skill;
+): number | null {
+  const { weakKeyWorstN, weakKeyMinObs, weakKeyMinKeys } = cfg.skill;
   const keyGms: number[] = [];
   const eligible: number[] = [];
   for (const [, ikis] of ikisByKey) {
@@ -86,26 +103,37 @@ export function weakKeyRatioFromKeyIkis(
     keyGms.push(gm);
     if (ikis.length >= weakKeyMinObs) eligible.push(gm);
   }
-  if (keyGms.length === 0 || eligible.length === 0) return 1;
+  // This compares your worst keys against your median. If only a handful of
+  // keys have data they are inevitably the *most common* ones — which are
+  // also your fastest — so the "worst five" would be drawn from your best
+  // keys and the ratio would read as a spurious 1.00. Demand broad coverage
+  // or report nothing.
+  if (eligible.length < weakKeyMinKeys) return null;
   const mMed = geometricMean(keyGms);
   const worst = eligible.sort((a, b) => b - a).slice(0, weakKeyWorstN);
   const mWorst = geometricMean(worst);
-  return mWorst > 0 ? clamp(mMed / mWorst, 0, 1) : 1;
+  return mWorst > 0 ? clamp(mMed / mWorst, 0, 1) : null;
 }
 
 export function isPunctChar(ch: string): boolean {
   return /[0-9`~!@#$%^&*()\-_=+\[\]{}\\|;:'",.<>/?£¬]/.test(ch);
 }
 
-/** Punctuation ratio (dim 6): alphabetic gm IKI vs punct/symbol/digit gm IKI. */
+/**
+ * Punctuation ratio (dim 6): alphabetic gm IKI vs punct/symbol/digit gm IKI.
+ * Null when either class is too thin — a neutral 1 would read as a perfect
+ * score for someone who simply hasn't typed any punctuation yet.
+ */
 export function punctRatioFromIkis(
   alphaIkis: readonly number[],
   punctIkis: readonly number[],
-): number {
-  if (alphaIkis.length < 20 || punctIkis.length < 20) return 1; // not enough data → neutral
+  cfg: EngineConfig = CONFIG,
+): number | null {
+  const min = cfg.skill.punctMinObs;
+  if (alphaIkis.length < min || punctIkis.length < min) return null;
   const mAlpha = geometricMean([...alphaIkis]);
   const mPunct = geometricMean([...punctIkis]);
-  return mPunct > 0 ? clamp(mAlpha / mPunct, 0, 1) : 1;
+  return mPunct > 0 ? clamp(mAlpha / mPunct, 0, 1) : null;
 }
 
 /**

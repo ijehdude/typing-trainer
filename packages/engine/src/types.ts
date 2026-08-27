@@ -112,16 +112,18 @@ export interface SkillProfile {
   accuracy: number;
   consistency: number;
   rhythm: number;
-  weakKeyControl: number;
-  punctuation: number;
+  /** null = not yet measured; excluded from `overall` rather than scored 100. */
+  weakKeyControl: number | null;
+  /** null = not yet measured. */
+  punctuation: number | null;
   overall: number;
   raw: {
     wpmNet: number;
     firstAttemptAccuracy: number;
     cv: number;
     residualMad: number;
-    weakKeyRatio: number;   // m_med / m_worst
-    punctRatio: number;     // m_alpha / m_punct
+    weakKeyRatio: number | null;   // m_med / m_worst
+    punctRatio: number | null;     // m_alpha / m_punct
   };
 }
 
