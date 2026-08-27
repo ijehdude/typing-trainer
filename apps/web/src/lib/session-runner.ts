@@ -132,7 +132,9 @@ export class SessionRunner {
         if (activePlan.prescription.targets.length > 0) {
           primary.targets = [...activePlan.prescription.targets];
         }
-        primary.stage = activePlan.prescription.stage;
+        // A prescription may ask for isolating drills; never go below the
+        // real-words floor (§10.1 minStage).
+        primary.stage = Math.max(CONFIG.content.minStage, activePlan.prescription.stage) as Stage;
         primary.label = "Plan: " + activePlan.prescription.note.split(".")[0]!.slice(0, 48);
       }
       await kvSet("activePlan", { ...activePlan, sessionsLeft: activePlan.sessionsLeft - 1 });

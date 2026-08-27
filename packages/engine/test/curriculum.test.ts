@@ -40,13 +40,14 @@ describe('curriculum (PRD §11)', () => {
     expect(gateDecision({ ...base, recentTotal: 20, recentCorrect: 18 })).toBe('demote'); // 90% < 93%
   });
 
-  it('demotion is applied and clamped at stage 0', () => {
+  it('demotion is applied and clamped at the real-words floor', () => {
     let state = initialCurriculumState(qwertyUs, true);
     state = applyGate(state, 'io', 'promote');
-    expect(state.stageByPattern['io']).toBe(1);
+    expect(state.stageByPattern['io']).toBe(3); // from the minStage entry point
     state = applyGate(state, 'io', 'demote');
     state = applyGate(state, 'io', 'demote');
-    expect(state.stageByPattern['io']).toBe(0);
+    state = applyGate(state, 'io', 'demote');
+    expect(state.stageByPattern['io']).toBe(2); // never drops into pseudo-words
   });
 
   it('foundations unlocking requires the §11.2 bar on every unlocked char', () => {

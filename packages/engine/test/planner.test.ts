@@ -99,12 +99,22 @@ describe('mid-session re-planning (PRD §13.3)', () => {
   });
 
   it('two consecutive failed blocks on a pattern trigger a strategy change, not a third block', () => {
-    const remaining = [block(3, 'target', ['io'], 2)];
+    const remaining = [block(3, 'target', ['io'], 3)];
     const replanned = replanRemaining({
       remaining,
       completed: [result(1, ['io'], false), result(2, ['io'], false)],
     });
-    expect(replanned[0]!.stage).toBe(1); // dropped a stage
+    expect(replanned[0]!.stage).toBe(2); // dropped a stage
+  });
+
+  it('at the real-words floor it changes angle instead of dropping to pseudo-words', () => {
+    const remaining = [block(3, 'target', ['io', 'rt'], 2)]; // 2 = minStage
+    const replanned = replanRemaining({
+      remaining,
+      completed: [result(1, ['io'], false), result(2, ['io'], false)],
+    });
+    expect(replanned[0]!.stage).toBe(2);              // never below the floor
+    expect(replanned[0]!.targets).toEqual(['rt']);    // swapped to an adjacent pattern
   });
 
   it('a met target promotes the next block a stage', () => {

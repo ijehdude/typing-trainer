@@ -38,7 +38,7 @@ export function planSession(input: PlanInput, cfg: EngineConfig = CONFIG): Sessi
   // Untracked patterns enter the ladder at the user's level, not at the
   // bottom (§10.1). A pattern that has been demoted keeps its earned stage —
   // the floor is an entry point, not a clamp.
-  const entryStage = input.stageFloor ?? 1;
+  const entryStage = Math.max(cfg.content.minStage, input.stageFloor ?? cfg.content.minStage) as Stage;
   const stageFor = (patterns: readonly string[]): Stage => {
     if (patterns.length === 0) return 4;
     const stages = patterns.map((p) => input.stageByPattern?.[p] ?? entryStage);
@@ -98,7 +98,7 @@ export function planSession(input: PlanInput, cfg: EngineConfig = CONFIG): Sessi
     push('warmup', 2, 4, [], { scored: false, label: 'Warm-up' });
     push('target', 4, stageFor(primaryTargets), primaryTargets);
     if (probe && findings.length < 2) {
-      push('probe', 1.5, 0, probe.patterns.slice(0, 2), { label: 'Quick check' });
+      push('probe', 1.5, entryStage, probe.patterns.slice(0, 2), { label: 'Quick check' });
       push('target', 1.5, stageFor(secondaryTargets), secondaryTargets);
     } else {
       push('target', 3, stageFor(secondaryTargets), secondaryTargets);
@@ -116,7 +116,7 @@ export function planSession(input: PlanInput, cfg: EngineConfig = CONFIG): Sessi
   }
 
   applyModeOverrides(blocks, input.mode ?? 'autopilot');
-  enforceInvariants(blocks);
+  enforceInvariants(blocks, cfg);
   return { blocks, minutes: m, seed: input.seed };
 }
 
@@ -154,13 +154,19 @@ function applyModeOverrides(blocks: PlannedBlock[], mode: TrainingMode): void {
 }
 
 /** Hard invariants (PRD §12.2). Throws in dev; the planner must never emit these. */
-function enforceInvariants(blocks: readonly PlannedBlock[]): void {
+function enforceInvariants(blocks: readonly PlannedBlock[], cfg: EngineConfig): void {
   const test = blocks[blocks.length - 1];
   if (!test || test.kind !== 'test' || test.targets.length > 0 || test.stage !== 5) {
     throw new Error('planner invariant: last block must be an untargeted stage-5 speed test');
   }
   if (blocks[0]!.kind !== 'warmup' || blocks[0]!.scored) {
     throw new Error('planner invariant: first block must be an unscored warm-up');
+  }
+  const belowMin = blocks.find((b) => b.stage < cfg.content.minStage);
+  if (belowMin) {
+    throw new Error(
+      `planner invariant: no block may use non-word content (block "${belowMin.label}" at stage ${belowMin.stage})`,
+    );
   }
 }
 
@@ -211,7 +217,7 @@ export function replanRemaining(ctx: ReplanContext, cfg: EngineConfig = CONFIG):
     if (lastFailed && prevFailedSame) {
       // Change of strategy: drop a stage; if already at the bottom, swap to
       // an adjacent pattern (first differing target drops out).
-      if (block.stage > 0) {
+      if (block.stage > cfg.content.minStage) {
         return { ...block, stage: (block.stage - 1) as Stage, label: `${block.label} (easier)` };
       }
       const swapped = block.targets.slice(1);

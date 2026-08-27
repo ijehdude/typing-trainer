@@ -163,13 +163,19 @@ export function gateDecision(p: PatternProgress, cfg: EngineConfig = CONFIG): Ga
   return 'stay';
 }
 
-export function applyGate(state: CurriculumState, pattern: string, decision: GateDecision): CurriculumState {
-  const current = state.stageByPattern[pattern] ?? 0;
+export function applyGate(
+  state: CurriculumState,
+  pattern: string,
+  decision: GateDecision,
+  cfg: EngineConfig = CONFIG,
+): CurriculumState {
+  const min = cfg.content.minStage;
+  const current = state.stageByPattern[pattern] ?? min;
   const next: Stage =
     decision === 'promote'
       ? ((Math.min(5, current + 1)) as Stage)
       : decision === 'demote'
-        ? ((Math.max(0, current - 1)) as Stage)
+        ? ((Math.max(min, current - 1)) as Stage) // never sink into pseudo-words
         : (current as Stage);
   if (next === current) return state;
   return { ...state, stageByPattern: { ...state.stageByPattern, [pattern]: next } };
@@ -232,21 +238,24 @@ export function newPatternCandidates(state: CurriculumState, layout: Layout): st
 
 /**
  * Where targeted practice starts on the content ladder for this user (§10.1).
- * Foundations users stay low — they are still learning key locations — but a
- * fluent typist begins at real words or phrases, never at pseudo-words.
+ * Never below `minStage`: nobody is shown pseudo-words. Foundations users get
+ * real words too — restricted to their unlocked characters.
  */
 export function stageFloorForWpm(
   wpm: number | null,
   inFoundations: boolean,
   cfg: EngineConfig = CONFIG,
 ): Stage {
-  if (inFoundations) return 1;
-  if (wpm === null || !Number.isFinite(wpm)) return cfg.content.defaultStageFloor as Stage;
-  let floor = 0;
+  const min = cfg.content.minStage;
+  if (inFoundations) return min as Stage;
+  if (wpm === null || !Number.isFinite(wpm)) {
+    return Math.max(min, cfg.content.defaultStageFloor) as Stage;
+  }
+  let floor: number = min;
   for (const [threshold, stage] of cfg.content.stageFloorByWpm) {
     if (wpm >= threshold) floor = stage;
   }
-  return floor as Stage;
+  return Math.max(min, floor) as Stage;
 }
 
 export function advanceUnit(state: CurriculumState): CurriculumState {

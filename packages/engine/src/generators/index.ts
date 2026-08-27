@@ -195,17 +195,23 @@ function syntheticStage(req: GeneratorRequest, rng: Rng, cfg: EngineConfig): str
 
 function wordPools(req: GeneratorRequest) {
   const words = lexicon();
-  const allowed = (w: string) =>
-    !req.allowedChars || [...w].every((c) => req.allowedChars!.has(c));
-  const targetWords: Array<{ w: string; weight: number }> = [];
-  const fillerWords: Array<{ w: string; weight: number }> = [];
-  words.forEach((w, r) => {
-    if (!allowed(w)) return;
-    const entry = { w, weight: zipfWeight(r) };
-    if (req.targets.some((t) => w.includes(t))) targetWords.push(entry);
-    else fillerWords.push(entry);
-  });
-  return { targetWords, fillerWords };
+  const build = (restrict: boolean) => {
+    const targetWords: Array<{ w: string; weight: number }> = [];
+    const fillerWords: Array<{ w: string; weight: number }> = [];
+    words.forEach((w, r) => {
+      if (restrict && req.allowedChars && ![...w].every((c) => req.allowedChars!.has(c))) return;
+      const entry = { w, weight: zipfWeight(r) };
+      if (req.targets.some((t) => w.includes(t))) targetWords.push(entry);
+      else fillerWords.push(entry);
+    });
+    return { targetWords, fillerWords };
+  };
+
+  const restricted = build(true);
+  // If the unlocked alphabet admits no real words at all, relax the unlock
+  // constraint rather than the guarantee that practice text is real language.
+  if (restricted.targetWords.length + restricted.fillerWords.length === 0) return build(false);
+  return restricted;
 }
 
 function pickWord(

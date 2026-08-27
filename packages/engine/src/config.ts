@@ -114,15 +114,23 @@ export const CONFIG = deepFreeze({
     demoteAccuracy: 0.93,
     demoteObsWindow: 20,
     /**
+     * The lowest stage anything is ever scheduled at. Stages 0–1 (drills and
+     * synthetic pseudo-words) remain implemented for ladder completeness, but
+     * we never put a person in front of text that isn't real language: even
+     * home-row-only Foundations has real words (`a as had all has half sad`),
+     * which beats `iol iop` on both dignity and transfer. Demotion, probes,
+     * and prescriptions all clamp here.
+     */
+    minStage: 2,
+    /**
      * Where a pattern *enters* the ladder, by measured net WPM. Someone who
-     * already types 70 WPM should be drilling real words and phrases, not
-     * `riom piol niot` — the same principle as §11.2 skipping Foundations at
-     * 50+. Promotion/demotion still moves them from here on evidence.
+     * already types 70 WPM should start on phrases — the same principle as
+     * §11.2 skipping Foundations at 50+. Promotion moves them on from here.
      */
     stageFloorByWpm: [
-      [0, 0], [20, 1], [30, 2], [70, 3],
+      [0, 2], [70, 3],
     ] as ReadonlyArray<readonly [number, number]>,
-    /** Used when no measurement exists yet (adults who can type at all). */
+    /** Used when no measurement exists yet. */
     defaultStageFloor: 2,
     /** Generator target density: occurrences per 100 chars, ±tolerance. §10.3 */
     defaultTargetDensity: 18,
